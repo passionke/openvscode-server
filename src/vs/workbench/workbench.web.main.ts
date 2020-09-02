@@ -177,4 +177,8 @@ import './contrib/processExplorer/browser/processExplorer.web.contribution.js';
 // Browser View
 import './contrib/browserView/browser/browserView.contribution.js';
 
+// Gitpod: Export Logs command
+// eslint-disable-next-line local/code-import-patterns
+import '../gitpod/browser/workbench/contrib/exportLogs.contribution.js';
+
 //#endregion

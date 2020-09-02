@@ -9,7 +9,7 @@ import { InstantiationType, registerSingleton } from '../../../../platform/insta
 import { ILoggerService } from '../../../../platform/log/common/log.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { IStorageService } from '../../../../platform/storage/common/storage.js';
-import { OneDataSystemWebAppender } from '../../../../platform/telemetry/browser/1dsAppender.js';
+// import { OneDataSystemWebAppender } from '../../../../platform/telemetry/browser/1dsAppender.js';
 import { ClassifiedEvent, IGDPRProperty, OmitMetadata, StrictPropertyCheck } from '../../../../platform/telemetry/common/gdprTypings.js';
 import { ITelemetryData, ITelemetryService, TelemetryLevel, TELEMETRY_SETTING_ID } from '../../../../platform/telemetry/common/telemetry.js';
 import { TelemetryLogAppender } from '../../../../platform/telemetry/common/telemetryLogAppender.js';
@@ -21,6 +21,8 @@ import { IMeteredConnectionService } from '../../../../platform/meteredConnectio
 import { resolveWorkbenchCommonProperties } from './workbenchCommonProperties.js';
 import { experimentsEnabled } from '../common/workbenchTelemetryUtils.js';
 import { IRequestService, NO_FETCH_TELEMETRY } from '../../../../platform/request/common/request.js';
+// eslint-disable-next-line local/code-import-patterns
+import { GitpodInsightsAppender } from '../../../../gitpod/browser/gitpodInsightsAppender.js';
 
 export class TelemetryService extends Disposable implements ITelemetryService {
 
@@ -108,7 +110,7 @@ export class TelemetryService extends Disposable implements ITelemetryService {
 					};
 					appenders.push(remoteTelemetryProvider);
 				} else {
-					appenders.push(new OneDataSystemWebAppender(isInternal, 'monacoworkbench', null, productService.aiConfig?.ariaKey));
+					appenders.push(new GitpodInsightsAppender(productService.segmentKey, productService.nameShort, productService.version, productService.gitpodPreview, productService.extensionsGallery?.serviceUrl)/* new OneDataSystemWebAppender(isInternal, 'monacoworkbench', null, productService.aiConfig?.ariaKey) */);
 				}
 			}
 			appenders.push(new TelemetryLogAppender('', false, loggerService, environmentService, productService));

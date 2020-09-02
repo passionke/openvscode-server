@@ -24,6 +24,8 @@ import * as extensions from './lib/extensions.ts';
 import jsonEditor from 'gulp-json-editor';
 import buildfile from './buildfile.ts';
 
+import VinylFile from 'vinyl';
+
 const REPO_ROOT = path.dirname(import.meta.dirname);
 const BUILD_ROOT = path.dirname(REPO_ROOT);
 const WEB_FOLDER = path.join(REPO_ROOT, 'remote', 'web');
@@ -66,43 +68,46 @@ function runEsbuildBundle(outDir: string, minify: boolean, nls: boolean, sourceM
 
 export const vscodeWebResourceIncludes = [
 
-	// NLS
-	'out-build/nls.messages.js',
+  // NLS
+  'out-build/nls.messages.js',
 
-	// Accessibility Signals
-	'out-build/vs/platform/accessibilitySignal/browser/media/*.mp3',
+  // Accessibility Signals
+  'out-build/vs/platform/accessibilitySignal/browser/media/*.mp3',
 
-	// Welcome
-	'out-build/vs/workbench/contrib/welcomeGettingStarted/common/media/**/*.{svg,png}',
+  // Welcome
+  'out-build/vs/workbench/contrib/welcomeGettingStarted/common/media/**/*.{svg,png}',
 
-	// Extensions
-	'out-build/vs/workbench/contrib/extensions/browser/media/{theme-icon.png,language-icon.svg}',
-	'out-build/vs/workbench/services/extensionManagement/common/media/*.{svg,png}',
+  // Extensions
+  'out-build/vs/workbench/contrib/extensions/browser/media/{theme-icon.png,language-icon.svg}',
+  'out-build/vs/workbench/services/extensionManagement/common/media/*.{svg,png}',
 
-	// Webview
-	'out-build/vs/workbench/contrib/webview/browser/pre/*.{js,html}',
+  // Webview
+  'out-build/vs/workbench/contrib/webview/browser/pre/*.{js,html}',
 
-	// Tree Sitter highlights
-	'out-build/vs/editor/common/languages/highlights/*.scm',
+  // Tree Sitter highlights
+  'out-build/vs/editor/common/languages/highlights/*.scm',
 
-	// Tree Sitter injections
-	'out-build/vs/editor/common/languages/injections/*.scm',
+  // Tree Sitter injections
+  'out-build/vs/editor/common/languages/injections/*.scm',
 
-	// Extension Host Worker
-	'out-build/vs/workbench/services/extensions/worker/webWorkerExtensionHostIframe.html'
+  // Extension Host Worker
+  'out-build/vs/workbench/services/extensions/worker/webWorkerExtensionHostIframe.html'
 ];
 
 const vscodeWebResources = [
+  // Includes
+  ...vscodeWebResourceIncludes,
 
-	// Includes
-	...vscodeWebResourceIncludes,
+  // Gitpod Workbench
+  'out-build/vs/gitpod/browser/workbench/*.html',
 
-	// Excludes
-	'!out-build/vs/**/{node,electron-browser,electron-main,electron-utility}/**',
-	'!out-build/vs/editor/standalone/**',
-	'!out-build/vs/workbench/**/*-tb.png',
-	'!out-build/vs/code/**/*-dev.html',
-	'!**/test/**'
+  // Excludes
+  '!out-build/vs/**/{node,electron-browser,electron-main,electron-utility}/**',
+  '!out-build/vs/editor/standalone/**',
+  '!out-build/vs/workbench/**/*-tb.png',
+  '!out-build/vs/code/**/*-dev.html',
+  '!out-build/vs/gitpod/**/*-dev.html',
+  '!**/test/**'
 ];
 
 const vscodeWebEntryPoints = [
@@ -115,6 +120,9 @@ const vscodeWebEntryPoints = [
 	buildfile.workerBackgroundTokenization,
 	buildfile.keyboardMaps,
 	buildfile.workbenchWeb,
+	// Gitpod Integration
+	buildfile.codeWeb,
+	buildfile.entrypoint('vs/workbench/workbench.web.main.internal') // TODO@esm remove line when we stop supporting web-amd-esm-bridge
 ].flat();
 
 /**
@@ -140,8 +148,8 @@ export const createVSCodeWebFileContentMapper = (extensionsRoot: string, product
 			};
 		}
 
-		return undefined;
-	};
+    return undefined;
+  };
 };
 
 const bundleVSCodeWebTask = task.define('bundle-vscode-web-OLD', task.series(
@@ -178,62 +186,85 @@ function packageTask(sourceFolderName: string, destinationFolderName: string) {
 		const src = gulp.src(sourceFolderName + '/**', { base: '.' })
 			.pipe(rename(function (path) { path.dirname = path.dirname!.replace(new RegExp('^' + sourceFolderName), 'out'); }));
 
-		const extensions = gulp.src('.build/web/extensions/**', { base: '.build/web', dot: true });
+    const extensions = gulp.src('.build/web/extensions/**', {
+      base: '.build/web',
+      dot: true,
+    });
 
-		const sources = es.merge(src, extensions)
-			.pipe(filter(['**', '!**/*.{js,css}.map'], { dot: true }));
+		const loader = gulp.src('build/loader.min', { base: 'build', dot: true }).pipe(rename('out/vs/loader.js')); // TODO@esm remove line when we stop supporting web-amd-esm-bridge
+
+		const sources = es.merge(src, extensions, loader)
+			.pipe(filter(['**', '!**/*.{js,css}.map'], { dot: true }))
+			// TODO@esm remove me once we stop supporting our web-esm-bridge
+			.pipe(es.through(function (this: any, file: any) {
+				if (file.relative === 'out/vs/workbench/workbench.web.main.internal.css') {
+					this.emit('data', new VinylFile({
+						contents: file.contents,
+						path: file.path.replace('workbench.web.main.internal.css', 'workbench.web.main.css'),
+						base: file.base
+					}));
+				}
+				this.emit('data', file);
+			}));
 
 		const name = product.nameShort;
 		const packageJsonStream = gulp.src(['remote/web/package.json'], { base: 'remote/web' })
 			.pipe(jsonEditor({ name, version, type: 'module' }));
 
-		const license = gulp.src(['remote/LICENSE'], { base: 'remote', allowEmpty: true });
+    const license = gulp.src(['remote/LICENSE'], {
+      base: 'remote',
+      allowEmpty: true,
+    });
 
-		const productionDependencies = getProductionDependencies(WEB_FOLDER);
-		const dependenciesSrc = productionDependencies.map(d => path.relative(REPO_ROOT, d)).map(d => [`${d}/**`, `!${d}/**/{test,tests}/**`, `!${d}/.bin/**`]).flat();
+    const productionDependencies = getProductionDependencies(WEB_FOLDER);
+    const dependenciesSrc = productionDependencies.map(d => path.relative(REPO_ROOT, d)).map(d => [`${d}/**`, `!${d}/**/{test,tests}/**`, `!${d}/.bin/**`]).flat();
 
 		const deps = gulp.src(dependenciesSrc, { base: 'remote/web', dot: true })
 			.pipe(filter(['**', '!**/package-lock.json']))
 			.pipe(util.cleanNodeModules(path.join(import.meta.dirname, '.webignore')));
 
-		const favicon = gulp.src('resources/server/favicon.ico', { base: 'resources/server' });
-		const manifest = gulp.src('resources/server/manifest.json', { base: 'resources/server' });
-		const pwaicons = es.merge(
-			gulp.src('resources/server/code-192.png', { base: 'resources/server' }),
-			gulp.src('resources/server/code-512.png', { base: 'resources/server' })
-		);
+    const favicon = gulp.src('resources/server/favicon.ico', {
+      base: 'resources/server',
+    });
+    const manifest = gulp.src('resources/server/manifest.json', {
+      base: 'resources/server',
+    });
+    const pwaicons = es.merge(
+      gulp.src('resources/server/code-192.png', { base: 'resources/server' }),
+      gulp.src('resources/server/code-512.png', { base: 'resources/server' }),
+    );
 
-		const all = es.merge(
-			packageJsonStream,
-			license,
-			sources,
-			deps,
-			favicon,
-			manifest,
-			pwaicons
-		);
+    const all = es.merge(
+      packageJsonStream,
+      license,
+      sources,
+      deps,
+      favicon,
+      manifest,
+      pwaicons,
+    );
 
-		const result = all
-			.pipe(util.skipDirectories())
-			.pipe(util.fixWin32DirectoryPermissions());
+    const result = all
+      .pipe(util.skipDirectories())
+      .pipe(util.fixWin32DirectoryPermissions());
 
-		return result.pipe(vfs.dest(destination));
-	};
+    return result.pipe(vfs.dest(destination));
+  };
 }
 
 const compileWebExtensionsBuildTask = task.define('compile-web-extensions-build', task.series(
-	task.define('clean-web-extensions-build', util.rimraf('.build/web/extensions')),
-	task.define('bundle-web-extensions-build', () => extensions.packageAllLocalExtensionsStream(true, false).pipe(gulp.dest('.build/web'))),
-	task.define('bundle-marketplace-web-extensions-build', () => extensions.packageMarketplaceExtensionsStream(true).pipe(gulp.dest('.build/web'))),
-	task.define('bundle-web-extension-media-build', () => extensions.buildExtensionMedia(false, '.build/web/extensions')),
+  task.define('clean-web-extensions-build', util.rimraf('.build/web/extensions')),
+  task.define('bundle-web-extensions-build', () => extensions.packageAllLocalExtensionsStream(true, false).pipe(gulp.dest('.build/web'))),
+  task.define('bundle-marketplace-web-extensions-build', () => extensions.packageMarketplaceExtensionsStream(true).pipe(gulp.dest('.build/web'))),
+  task.define('bundle-web-extension-media-build', () => extensions.buildExtensionMedia(false, '.build/web/extensions')),
 ));
 gulp.task(compileWebExtensionsBuildTask);
 
 const dashed = (str: string) => (str ? `-${str}` : ``);
 
-['', 'min'].forEach(minified => {
-	const sourceFolderName = `out-vscode-web${dashed(minified)}`;
-	const destinationFolderName = `vscode-web`;
+['', 'min'].forEach((minified) => {
+  const sourceFolderName = `out-vscode-web${dashed(minified)}`;
+  const destinationFolderName = `vscode-web`;
 
 	const vscodeWebTaskCI = task.define(`vscode-web${dashed(minified)}-ci`, task.series(
 		copyCodiconsTask,
@@ -244,9 +275,9 @@ const dashed = (str: string) => (str ? `-${str}` : ``);
 	));
 	gulp.task(vscodeWebTaskCI);
 
-	const vscodeWebTask = task.define(`vscode-web${dashed(minified)}`, task.series(
-		compileBuildWithManglingTask,
-		vscodeWebTaskCI
-	));
-	gulp.task(vscodeWebTask);
+  const vscodeWebTask = task.define(`vscode-web${dashed(minified)}`, task.series(
+    compileBuildWithManglingTask,
+    vscodeWebTaskCI
+  ));
+  gulp.task(vscodeWebTask);
 });

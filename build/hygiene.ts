@@ -37,10 +37,10 @@ export function hygiene(some: NodeJS.ReadWriteStream | string[] | undefined, run
 	const productJson = es.through(function (file: VinylFile) {
 		const product = JSON.parse(file.contents!.toString('utf8'));
 
-		if (product.extensionsGallery) {
-			console.error(`product.json: Contains 'extensionsGallery'`);
-			errorCount++;
-		}
+		// if (product.extensionsGallery) {
+		// 	console.error(`product.json: Contains 'extensionsGallery'`);
+		// 	errorCount++;
+		// }
 
 		this.emit('data', file);
 	});
@@ -105,13 +105,15 @@ export function hygiene(some: NodeJS.ReadWriteStream | string[] | undefined, run
 	});
 
 	const copyrights = es.through(function (file: VinylFileWithLines) {
-		const lines = file.__lines;
+		if (file.relative.indexOf('gitpod') === -1) {
+			const lines = file.__lines;
 
-		for (let i = 0; i < copyrightHeaderLines.length; i++) {
-			if (lines[i] !== copyrightHeaderLines[i]) {
-				console.error(file.relative + ': Missing or bad copyright statement');
-				errorCount++;
-				break;
+			for (let i = 0; i < copyrightHeaderLines.length; i++) {
+				if (lines[i] !== copyrightHeaderLines[i]) {
+					console.error(file.relative + ': Missing or bad copyright statement');
+					errorCount++;
+					break;
+				}
 			}
 		}
 
