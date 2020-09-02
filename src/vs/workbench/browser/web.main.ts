@@ -98,6 +98,8 @@ import { INotificationService, Severity } from '../../platform/notification/comm
 import { IDefaultAccountService } from '../../platform/defaultAccount/common/defaultAccount.js';
 import { DefaultAccountService } from '../services/accounts/browser/defaultAccount.js';
 import { AccountPolicyService } from '../services/policies/common/accountPolicyService.js';
+// eslint-disable-next-line local/code-import-patterns
+import { addCustomGitpodProductProperties } from '../../gitpod/platform/product/common/product.js';
 
 export class BrowserMain extends Disposable {
 
@@ -271,7 +273,7 @@ export class BrowserMain extends Disposable {
 		const workspace = this.resolveWorkspace();
 
 		// Product
-		const productService: IProductService = mixin({ _serviceBrand: undefined, ...product }, this.configuration.productConfiguration);
+		const productService: IProductService = { _serviceBrand: undefined, ...addCustomGitpodProductProperties(mixin({ ...product }, this.configuration.productConfiguration)) };
 		serviceCollection.set(IProductService, productService);
 
 		// Environment
