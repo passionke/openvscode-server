@@ -1,8 +1,4 @@
 "use strict";
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
- *--------------------------------------------------------------------------------------------*/
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -45,6 +41,10 @@ exports.createCompile = createCompile;
 exports.transpileTask = transpileTask;
 exports.compileTask = compileTask;
 exports.watchTask = watchTask;
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 const event_stream_1 = __importDefault(require("event-stream"));
 const fs_1 = __importDefault(require("fs"));
 const gulp_1 = __importDefault(require("gulp"));
@@ -61,6 +61,9 @@ const task = __importStar(require("./task"));
 const index_1 = require("./mangle/index");
 const ts = require("typescript");
 const watch = require('./watch');
+const packageJson = require('../../package.json');
+const productJson = require('../../product.json');
+const replace = require('gulp-replace');
 // --- gulp-tsb: compile and transpile --------------------------------
 const reporter = (0, reporter_1.createReporter)();
 function getTypeScriptCompilerOptions(src) {
@@ -96,8 +99,19 @@ function createCompile(src, { build, emitError, transpileOnly, preserveEnglish }
         const isUtf8Test = (f) => /(\/|\\)test(\/|\\).*utf8/.test(f.path);
         const isRuntimeJs = (f) => f.path.endsWith('.js') && !f.path.includes('fixtures');
         const noDeclarationsFilter = util.filter(data => !(/\.d\.ts$/.test(data.path)));
+        const productJsFilter = util.filter(data => !build && data.path.endsWith('vs/platform/product/common/product.ts'));
+        const productConfiguration = JSON.stringify({
+            ...productJson,
+            version: `${packageJson.version}-dev`,
+            nameShort: `${productJson.nameShort} Dev`,
+            nameLong: `${productJson.nameLong} Dev`,
+            dataFolderName: `${productJson.dataFolderName}-dev`
+        });
         const input = event_stream_1.default.through();
         const output = input
+            .pipe(productJsFilter)
+            .pipe(replace(/{\s*\/\*BUILD->INSERT_PRODUCT_CONFIGURATION\*\/\s*}/, productConfiguration, { skipBinary: true }))
+            .pipe(productJsFilter.restore)
             .pipe(util.$if(isUtf8Test, bom())) // this is required to preserve BOM in test files that loose it otherwise
             .pipe(util.$if(!build && isRuntimeJs, util.appendOwnPathSourceURL()))
             .pipe(tsFilter)
