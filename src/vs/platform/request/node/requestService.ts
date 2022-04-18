@@ -103,9 +103,7 @@ export class RequestService extends AbstractRequestService implements IRequestSe
 			...process.env,
 			...shellEnv
 		};
-		const agent = options.agent ? options.agent : await getProxyAgent(options.url || '', env, { proxyUrl, strictSSL });
 
-		options.agent = agent;
 		options.strictSSL = strictSSL;
 
 		if (this.authorization) {
@@ -226,7 +224,7 @@ async function nodeRequestAttempt(options: NodeRequestOptions, token: Cancellati
 		const req = rawRequest(opts, (res: http.IncomingMessage) => {
 			const followRedirects: number = isNumber(options.followRedirects) ? options.followRedirects : 3;
 			if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && followRedirects > 0 && res.headers['location']) {
-				nodeRequest({
+				nodeRequestAttempt({
 					...options,
 					url: res.headers['location'],
 					followRedirects: followRedirects - 1
