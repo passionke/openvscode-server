@@ -23,9 +23,9 @@ import watch from './watch/index.ts';
 import bom from 'gulp-bom';
 import * as tsb from './tsb/index.ts';
 import sourcemaps from 'gulp-sourcemaps';
-const packageJson = require('../../package.json');
-const productJson = require('../../product.json');
-const replace = require('gulp-replace');
+import packageJson from '../../package.json' with { type: 'json' };
+import productJson from '../../product.json' with { type: 'json' };
+import replace from 'gulp-replace';
 
 
 // --- gulp-tsb: compile and transpile --------------------------------
