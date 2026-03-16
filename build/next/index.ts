@@ -115,6 +115,8 @@ const codeEntryPoints = [
 const webEntryPoints = [
 	'vs/workbench/workbench.web.main.internal',
 	'vs/code/browser/workbench/workbench',
+	// Gitpod workbench entry point
+	'vs/gitpod/browser/workbench/workbench',
 ];
 
 const keyboardMapEntryPoints = [
@@ -170,6 +172,7 @@ function getEntryPointsForTarget(target: BuildTarget): string[] {
 			return [
 				...workerEntryPoints,
 				'vs/workbench/workbench.web.main.internal', // web workbench only (no browser shell)
+				'vs/gitpod/browser/workbench/workbench', // Gitpod workbench entry point
 				...keyboardMapEntryPoints,
 			];
 		default:
@@ -212,10 +215,12 @@ function getCssBundleEntryPointsForTarget(target: BuildTarget): Set<string> {
 			return new Set([
 				'vs/workbench/workbench.web.main.internal',
 				'vs/code/browser/workbench/workbench',
+				'vs/gitpod/browser/workbench/workbench',
 			]);
 		case 'web':
 			return new Set([
 				'vs/workbench/workbench.web.main.internal',
+				'vs/gitpod/browser/workbench/workbench',
 			]);
 		default:
 			throw new Error(`Unknown target: ${target}`);
@@ -305,6 +310,8 @@ const serverWebResourcePatterns = [
 	'vs/code/browser/workbench/workbench.html',
 	'vs/code/browser/workbench/workbench-dev.html',
 	'vs/code/browser/workbench/callback.html',
+	// Gitpod workbench
+	'vs/gitpod/browser/workbench/*.html',
 	'vs/workbench/services/extensions/worker/webWorkerExtensionHostIframe.html',
 	'vs/workbench/contrib/webview/browser/pre/*.html',
 
@@ -331,6 +338,8 @@ const webResourcePatterns = [
 	'vs/code/browser/workbench/workbench.html',
 	'vs/code/browser/workbench/workbench-dev.html',
 	'vs/code/browser/workbench/callback.html',
+	// Gitpod workbench
+	'vs/gitpod/browser/workbench/*.html',
 	'vs/workbench/services/extensions/worker/webWorkerExtensionHostIframe.html',
 	'vs/workbench/contrib/webview/browser/pre/*.html',
 

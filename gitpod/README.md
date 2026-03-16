@@ -7,9 +7,7 @@ Prepare for build and login gcloud
 ```sh
 # One time exec if you didn't change source code
 # If workspace comes from a prebuild, then you can skip this command, see task `Build Prepare` in .gitpod.yml file
-npm run gulp compile-build-without-mangling
-npm run gulp extensions-ci \
-    && npm run gulp minify-vscode-reh \
+npm run gulp core-ci \
     && npm run gulp vscode-web-min-ci \
     && npm run gulp vscode-reh-linux-x64-min-ci
 ```
