@@ -693,7 +693,8 @@ async function doStart(): Promise<IDisposable> {
 	subscriptions.add(cancelObserveTunneled);
 	const connectLocalApp: ICommand = {
 		id: 'gitpod.api.connectLocalApp',
-		handler: (apiPort: number = defaultApiPort) => {
+		handler: (...args: unknown[]) => {
+			const apiPort = typeof args[0] === 'number' ? args[0] : defaultApiPort;
 			cancelObserveTunneled.dispose();
 			cancelObserveTunneled = observeTunneled(apiPort);
 			subscriptions.add(cancelObserveTunneled);
@@ -785,7 +786,8 @@ async function doStart(): Promise<IDisposable> {
 
 	const openDesktop: ICommand = {
 		id: 'gitpod.api.openDesktop',
-		handler: (url: string) => {
+		handler: (...args: unknown[]) => {
+			const url = typeof args[0] === 'string' ? args[0] : '';
 			if (!url || url.length === 0) {
 				return;
 			}

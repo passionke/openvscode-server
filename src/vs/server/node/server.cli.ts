@@ -483,7 +483,7 @@ function sendToPort(args: PipeCommand | { type: 'preview'; url: string }, verbos
 	});
 }
 
-async function sendToPipe(args: PipeCommand, verbose: boolean): Promise<string> {
+export async function sendToPipe(args: PipeCommand, verbose: boolean): Promise<string> {
 	const http = await import('http');
 	if (verbose) {
 		console.log(JSON.stringify(args, null, '  '));
