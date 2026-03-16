@@ -9,7 +9,7 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions } from '../../../../workbench/common/contributions.js';
 import { Categories } from '../../../../platform/action/common/actionCommonCategories.js';
 import { MenuId, registerAction2, Action2 } from '../../../../platform/actions/common/actions.js';
-import { ProductContribution, UpdateContribution, CONTEXT_UPDATE_STATE, SwitchProductQualityContribution, RELEASE_NOTES_URL, showReleaseNotesInEditor, DefaultAccountUpdateContribution } from './update.js';
+import { ProductContribution, UpdateContribution, CONTEXT_UPDATE_STATE, SwitchProductQualityContribution, /*RELEASE_NOTES_URL,*/ showReleaseNotesInEditor, DefaultAccountUpdateContribution } from './update.js';
 import { UpdateStatusBarContribution } from './updateStatusBarEntry.js';
 import { UpdateTitleBarContribution } from './updateTitleBarEntry.js';
 import { LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
@@ -102,10 +102,10 @@ export class ShowCurrentReleaseNotesFromCurrentFileAction extends Action2 {
 	}
 }
 
-if (ShowReleaseNotesAction.AVAILABLE) {
-	registerAction2(ShowReleaseNotesAction);
-}
-registerAction2(ShowCurrentReleaseNotesFromCurrentFileAction);
+// if (ShowReleaseNotesAction.AVAILABLE) {
+// 	registerAction2(ShowReleaseNotesAction);
+// }
+// registerAction2(ShowCurrentReleaseNotesFromCurrentFileAction);
 
 // Update
 
