@@ -9,8 +9,14 @@ ACR_REGISTRY="${ACR_REGISTRY:-crpi-cf9vxpq3n8or17mw.cn-hangzhou.personal.cr.aliy
 ACR_NAMESPACE="${ACR_NAMESPACE:-passionke}"
 IMAGE_NAME="${IMAGE_NAME:-openvscode-server}"
 VERSION="$(node -p "require('./package.json').version")"
-TAG="${TAG:-${VERSION}-ovs-chat}"
-TARBALL="${TARBALL:-openvscode-server-v${VERSION}-linux-arm64.tar.gz}"
+VSCODE_ARCH="${VSCODE_ARCH:-arm64}"
+case "${VSCODE_ARCH}" in
+  arm64) PLATFORM="${PLATFORM:-linux/arm64}"; DEFAULT_TAG="${VERSION}-ovs-chat" ;;
+  x64)   PLATFORM="${PLATFORM:-linux/amd64}"; DEFAULT_TAG="${VERSION}-ovs-chat-amd64" ;;
+  *) die "unsupported VSCODE_ARCH: ${VSCODE_ARCH}" ;;
+esac
+TAG="${TAG:-${DEFAULT_TAG}}"
+TARBALL="${TARBALL:-openvscode-server-v${VERSION}-linux-${VSCODE_ARCH}.tar.gz}"
 FULL_IMAGE="${ACR_REGISTRY}/${ACR_NAMESPACE}/${IMAGE_NAME}:${TAG}"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -24,14 +30,14 @@ else
   echo ">>> podman login ${ACR_REGISTRY}"
   echo "${ACR_PASSWORD}" | podman login "${ACR_REGISTRY}" -u "${ACR_USERNAME}" --password-stdin
 fi
-[[ -f "${TARBALL}" ]] || die "missing tarball: ${TARBALL} (download CI artifact linux-arm64 first)"
+[[ -f "${TARBALL}" ]] || die "missing tarball: ${TARBALL}"
 
 if [[ ! -f .build/ovs-chat-demo.vsix ]]; then
   bash scripts/ovs-chat/package-ovs-extension-vsix.sh
 fi
 
-echo ">>> podman build ${FULL_IMAGE}"
-podman build --platform linux/arm64 \
+echo ">>> podman build ${PLATFORM} ${FULL_IMAGE}"
+podman build --platform "${PLATFORM}" \
   -f scripts/ovs-chat/Dockerfile.ci \
   --build-arg "TARBALL=${TARBALL}" \
   -t "${FULL_IMAGE}" \
@@ -39,6 +45,14 @@ podman build --platform linux/arm64 \
 
 echo ">>> podman push ${FULL_IMAGE}"
 podman push "${FULL_IMAGE}"
+
+# optional rolling tag
+if [[ -n "${ALSO_TAG:-}" ]]; then
+  EXTRA="${ACR_REGISTRY}/${ACR_NAMESPACE}/${IMAGE_NAME}:${ALSO_TAG}"
+  podman tag "${FULL_IMAGE}" "${EXTRA}"
+  podman push "${EXTRA}"
+  echo "ALSO: ${EXTRA}"
+fi
 
 echo ""
 echo "DONE: ${FULL_IMAGE}"
