@@ -27,11 +27,15 @@ DISABLE_V8_COMPILE_CACHE=1 npm run gulp minify-vscode-reh-web
 log "gulp vscode-reh-web-linux-arm64-min-ci"
 DISABLE_V8_COMPILE_CACHE=1 npm run gulp vscode-reh-web-linux-arm64-min-ci
 
-[[ -d ../vscode-reh-web-linux-arm64 ]] || { echo "missing ../vscode-reh-web-linux-arm64" >&2; exit 1; }
+[[ -d ../vscode-reh-web-linux-arm64 ]] || [[ -d "../${NAME}" ]] || { echo "missing linux-arm64 package dir" >&2; exit 1; }
 
 log "tarball ${NAME}.tar.gz"
 rm -f "${NAME}.tar.gz"
-mv ../vscode-reh-web-linux-arm64 "../${NAME}"
+if [[ -d ../vscode-reh-web-linux-arm64 ]]; then
+  rm -rf "../${NAME}"
+  mv ../vscode-reh-web-linux-arm64 "../${NAME}"
+fi
+export COPYFILE_DISABLE=1
 tar -czf "${NAME}.tar.gz" -C .. "${NAME}"
 
 log "push ACR"

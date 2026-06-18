@@ -12,9 +12,9 @@ ARG TARBALL
 COPY ${TARBALL} /tmp/ovs.tar.gz
 RUN set -eux; \
     tar -xzf /tmp/ovs.tar.gz -C /tmp; \
-    dir=$(tar -tzf /tmp/ovs.tar.gz | head -1 | cut -d/ -f1); \
+    dir=$(tar -tzf /tmp/ovs.tar.gz | grep -E '/bin/remote-cli/openvscode-server$' | head -1 | cut -d/ -f1); \
     mv "/tmp/${dir}" "${OPENVSCODE_SERVER_ROOT}"; \
-    cp "${OPENVSCODE_SERVER_ROOT}/bin/remote-cli/openvscode-server" "${OPENVSCODE_SERVER_ROOT}/bin/remote-cli/code"; \
+    ln -sf openvscode-server "${OPENVSCODE_SERVER_ROOT}/bin/remote-cli/code"; \
     rm -f /tmp/ovs.tar.gz
 
 ARG USERNAME=openvscode-server
