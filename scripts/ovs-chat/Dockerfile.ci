@@ -1,10 +1,4 @@
-# openvscode-server + ovs-chat-demo (self-built). Author: kejiqing
-# Build: podman build -f scripts/ovs-chat/Dockerfile.openvscode \
-#   --build-arg RELEASE_TAG=openvscode-server-v1.109.5 \
-#   --build-arg RELEASE_ORG=passionke \
-#   -t passionke/openvscode-server:ovs-chat .
-ARG RELEASE_TAG=openvscode-server-v1.109.5
-ARG RELEASE_ORG=passionke
+# CI-built openvscode-server + ovs-chat-demo (linux/arm64 for Podman on Apple Silicon). Author: kejiqing
 FROM docker.1ms.run/buildpack-deps:22.04-curl
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -13,17 +7,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /home/
 ARG OPENVSCODE_SERVER_ROOT="/home/.openvscode-server"
-ARG RELEASE_TAG=openvscode-server-v1.109.5
-ARG RELEASE_ORG=passionke
+ARG TARBALL
 
-RUN arch=$(uname -m) && \
-    if [ "${arch}" = "x86_64" ]; then arch="x64"; \
-    elif [ "${arch}" = "aarch64" ]; then arch="arm64"; fi && \
-    wget -q "https://github.com/${RELEASE_ORG}/openvscode-server/releases/download/${RELEASE_TAG}/${RELEASE_TAG}-linux-${arch}.tar.gz" && \
-    tar -xzf "${RELEASE_TAG}-linux-${arch}.tar.gz" && \
-    mv -f "${RELEASE_TAG}-linux-${arch}" "${OPENVSCODE_SERVER_ROOT}" && \
-    cp "${OPENVSCODE_SERVER_ROOT}/bin/remote-cli/openvscode-server" "${OPENVSCODE_SERVER_ROOT}/bin/remote-cli/code" && \
-    rm -f "${RELEASE_TAG}-linux-${arch}.tar.gz"
+COPY ${TARBALL} /tmp/ovs.tar.gz
+RUN set -eux; \
+    tar -xzf /tmp/ovs.tar.gz -C /tmp; \
+    dir=$(tar -tzf /tmp/ovs.tar.gz | head -1 | cut -d/ -f1); \
+    mv "/tmp/${dir}" "${OPENVSCODE_SERVER_ROOT}"; \
+    cp "${OPENVSCODE_SERVER_ROOT}/bin/remote-cli/openvscode-server" "${OPENVSCODE_SERVER_ROOT}/bin/remote-cli/code"; \
+    rm -f /tmp/ovs.tar.gz
 
 ARG USERNAME=openvscode-server
 ARG USER_UID=1000

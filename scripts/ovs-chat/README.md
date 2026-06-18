@@ -9,11 +9,14 @@
 | 场景 | 平台 | 产物 | 怎么打 |
 |------|------|------|--------|
 | **本机 Mac 开发**（`run-dev.sh`） | `darwin-arm64`（Apple Silicon）或 `darwin-x64` | `../vscode-reh-web-darwin-*` | `bash scripts/ovs-chat/build-ovs.sh` |
-| **Podman 容器 / Linux 服务器** | `linux-arm64`（Mac 上 podman 优先）或 `linux-x64` | `openvscode-server-v*-linux-*.tar.gz` | GitHub Actions **OVS Chat Linux Build**，或 `passionke/openvscode-releases` Release workflow |
+| **Podman 容器 / Linux 服务器** | `linux-arm64`（Mac 上 podman 优先）或 `linux-x64` | `openvscode-server-v*-linux-*.tar.gz` / `ghcr.io/passionke/openvscode-server:ovs-chat-arm64` | **OVS Chat Darwin ARM64**（推 GHCR）或 **OVS Chat Linux Build** |
 
-**结论：** 本地跑 3100 **要打本机架构包**（你是 M 系列 → **darwin-arm64**）；CI 打 **linux-arm64 + linux-x64** 给容器部署，不能拿 linux 包在 Mac 上直接 `run-dev.sh`。
+**结论：** 本地跑 3100 **要打本机架构包**（M 系列 → **darwin-arm64**）；容器在 Mac 上跑 **linux/arm64** 镜像，不能拿 linux 包直接 `run-dev.sh`。
 
-CI 触发：GitHub → Actions → **OVS Chat Linux Build** → Run workflow。
+CI 触发（手工）：
+
+- **OVS Chat Darwin ARM64** — darwin-arm64 tarball + 可选推 `ghcr.io/passionke/openvscode-server:ovs-chat-arm64`
+- **OVS Chat Linux Build** — linux-arm64 / linux-x64 tarball
 
 ## 成功标准
 
@@ -49,7 +52,7 @@ tail -f .build/ovs-server-data/data/logs/*/exthost*/remoteexthost.log | grep OVS
 
 ```bash
 ./scripts/ovs-chat/package-ovs-extension-vsix.sh
-podman build -f scripts/ovs-chat/Containerfile.openvscode \
+podman build -f scripts/ovs-chat/Dockerfile.openvscode \
   --build-arg RELEASE_ORG=passionke \
   --build-arg RELEASE_TAG=openvscode-server-v1.109.5 \
   -t passionke/openvscode-server:ovs-chat .
