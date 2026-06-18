@@ -1,0 +1,67 @@
+# openvscode-server + ovs-chat-demo (self-built). Author: kejiqing
+# Build: podman build -f scripts/ovs-chat/Dockerfile.openvscode \
+#   --build-arg RELEASE_TAG=openvscode-server-v1.109.5 \
+#   --build-arg RELEASE_ORG=passionke \
+#   -t passionke/openvscode-server:ovs-chat .
+ARG RELEASE_TAG=openvscode-server-v1.109.5
+ARG RELEASE_ORG=passionke
+FROM docker.1ms.run/buildpack-deps:22.04-curl
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git sudo libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /home/
+ARG OPENVSCODE_SERVER_ROOT="/home/.openvscode-server"
+ARG RELEASE_TAG=openvscode-server-v1.109.5
+ARG RELEASE_ORG=passionke
+
+RUN arch=$(uname -m) && \
+    if [ "${arch}" = "x86_64" ]; then arch="x64"; \
+    elif [ "${arch}" = "aarch64" ]; then arch="arm64"; fi && \
+    wget -q "https://github.com/${RELEASE_ORG}/openvscode-server/releases/download/${RELEASE_TAG}/${RELEASE_TAG}-linux-${arch}.tar.gz" && \
+    tar -xzf "${RELEASE_TAG}-linux-${arch}.tar.gz" && \
+    mv -f "${RELEASE_TAG}-linux-${arch}" "${OPENVSCODE_SERVER_ROOT}" && \
+    cp "${OPENVSCODE_SERVER_ROOT}/bin/remote-cli/openvscode-server" "${OPENVSCODE_SERVER_ROOT}/bin/remote-cli/code" && \
+    rm -f "${RELEASE_TAG}-linux-${arch}.tar.gz"
+
+ARG USERNAME=openvscode-server
+ARG USER_UID=1000
+ARG USER_GID=1000
+RUN groupadd --gid ${USER_GID} ${USERNAME} \
+    && useradd --uid ${USER_UID} --gid ${USERNAME} -m -s /bin/bash ${USERNAME} \
+    && echo "${USERNAME} ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} \
+    && chmod 0440 /etc/sudoers.d/${USERNAME}
+
+COPY scripts/ovs-chat/openvscode-settings.json /opt/claw-ovs/server-data/Machine/settings.json
+COPY .build/ovs-chat-demo.vsix /tmp/ovs-chat-demo.vsix
+
+RUN set -eux; \
+    mkdir -p /opt/claw-extensions /opt/claw-ovs/home /opt/claw-ovs/server-data/data/logs; \
+    HOME=/opt/claw-ovs/home ${OPENVSCODE_SERVER_ROOT}/bin/openvscode-server \
+      --install-extension /tmp/ovs-chat-demo.vsix \
+      --extensions-dir=/opt/claw-extensions \
+      --server-data-dir=/opt/claw-ovs/server-data \
+      --force; \
+    HOME=/opt/claw-ovs/home ${OPENVSCODE_SERVER_ROOT}/bin/openvscode-server \
+      --list-extensions \
+      --extensions-dir=/opt/claw-extensions \
+      --server-data-dir=/opt/claw-ovs/server-data | grep -q 'claw\.ovs-chat-demo'; \
+    chmod -R a+rwX /opt/claw-extensions /opt/claw-ovs; \
+    rm -f /tmp/ovs-chat-demo.vsix
+
+RUN chmod g+rw /home && \
+    mkdir -p /home/workspace && \
+    chown -R ${USERNAME}:${USERNAME} /home/workspace /opt/claw-ovs ${OPENVSCODE_SERVER_ROOT}
+
+USER ${USERNAME}
+WORKDIR /home/workspace/
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 HOME=/home/workspace \
+    OPENVSCODE_SERVER_ROOT=${OPENVSCODE_SERVER_ROOT}
+
+EXPOSE 3000
+ENTRYPOINT ["/home/.openvscode-server/bin/openvscode-server"]
+CMD ["--host=0.0.0.0", "--port=3000", "--without-connection-token", \
+     "--extensions-dir=/opt/claw-extensions", \
+     "--server-data-dir=/opt/claw-ovs/server-data", \
+     "--enable-proposed-api=claw.ovs-chat-demo"]

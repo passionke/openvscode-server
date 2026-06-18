@@ -1,0 +1,210 @@
+# Build darwin-arm64 reh-web tarball (native Mac) and optional linux/arm64 GHCR image (Podman on Apple Silicon).
+# Author: kejiqing
+name: OVS Chat Darwin ARM64
+
+on:
+  workflow_dispatch:
+    inputs:
+      push_ghcr:
+        description: Build and push linux/arm64 container to GHCR (Podman on Apple Silicon)
+        type: boolean
+        default: true
+      upload_release:
+        description: Upload darwin-arm64 tarball to GitHub Release (tag openvscode-server-v*)
+        type: boolean
+        default: false
+
+env:
+  NPM_REGISTRY: https://registry.npmmirror.com
+
+jobs:
+  darwin-arm64:
+    name: darwin-arm64 tarball
+    runs-on: macos-14
+    timeout-minutes: 180
+    env:
+      NPM_ARCH: arm64
+      VSCODE_ARCH: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+          npm_config_arch: ${{ env.NPM_ARCH }}
+          VSCODE_ARCH: ${{ env.VSCODE_ARCH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GYP_DEFINES: kerberos_use_rtld=false
+        run: |
+          set -e
+          npm config set registry "$NPM_REGISTRY"
+          python3 -m pip install --break-system-packages setuptools
+          cd build && npm ci && cd ..
+          node build/npm/preinstall.ts
+          for i in 1 2 3 4 5; do
+            npm ci && break
+            if [ "$i" -eq 5 ]; then
+              echo "npm ci failed after 5 attempts" >&2
+              exit 1
+            fi
+            echo "npm ci retry $i..."
+            sleep 15
+          done
+          node build/lib/builtInExtensions.ts
+
+      - name: Compile reh-web (darwin-arm64)
+        env:
+          DISABLE_V8_COMPILE_CACHE: 1
+        run: |
+          set -e
+          npm run gulp core-ci
+          npm run gulp extensions-ci
+          npm run gulp minify-vscode-reh-web
+          npm run gulp vscode-reh-web-darwin-${{ env.VSCODE_ARCH }}-min-ci
+
+      - name: Package ovs-chat-demo VSIX
+        run: |
+          chmod +x scripts/ovs-chat/package-ovs-extension-vsix.sh
+          bash scripts/ovs-chat/package-ovs-extension-vsix.sh
+
+      - name: Bundle tarball
+        run: |
+          set -e
+          version=$(node -p "require('./package.json').version")
+          name="openvscode-server-v${version}-darwin-${{ env.VSCODE_ARCH }}"
+          mv "vscode-reh-web-darwin-${{ env.VSCODE_ARCH }}" "${name}"
+          tar -czf "${name}.tar.gz" "${name}"
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: darwin-arm64
+          path: |
+            openvscode-server-v*-darwin-arm64.tar.gz
+            .build/ovs-chat-demo.vsix
+
+  linux-arm64-image:
+    name: linux/arm64 GHCR image
+    if: inputs.push_ghcr == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      packages: write
+    env:
+      NPM_ARCH: arm64
+      VSCODE_ARCH: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Setup system (xvfb)
+        run: |
+          set -e
+          ./build/azure-pipelines/linux/apt-retry.sh sudo apt-get update
+          ./build/azure-pipelines/linux/apt-retry.sh sudo apt-get install -y pkg-config dbus xvfb libgtk-3-0 libxkbfile-dev libkrb5-dev libgbm1
+          sudo cp build/azure-pipelines/linux/xvfb.init /etc/init.d/xvfb
+          sudo chmod +x /etc/init.d/xvfb
+          sudo update-rc.d xvfb defaults
+          sudo service xvfb start
+
+      - name: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+          npm_config_arch: ${{ env.NPM_ARCH }}
+        run: |
+          set -e
+          npm config set registry "$NPM_REGISTRY"
+          cd build && npm ci && cd ..
+          source ./build/azure-pipelines/linux/setup-env.sh
+          node build/npm/preinstall.ts
+          npm ci
+
+      - name: Compile reh-web (linux-arm64)
+        env:
+          DISABLE_V8_COMPILE_CACHE: 1
+        run: |
+          set -e
+          npm run gulp core-ci
+          npm run gulp extensions-ci
+          npm run gulp minify-vscode-reh-web
+          npm run gulp vscode-reh-web-linux-${{ env.VSCODE_ARCH }}-min-ci
+
+      - name: Package ovs-chat-demo VSIX
+        run: |
+          chmod +x scripts/ovs-chat/package-ovs-extension-vsix.sh
+          bash scripts/ovs-chat/package-ovs-extension-vsix.sh
+
+      - name: Bundle tarball for image
+        id: bundle
+        run: |
+          set -e
+          version=$(node -p "require('./package.json').version")
+          name="openvscode-server-v${version}-linux-${{ env.VSCODE_ARCH }}"
+          mv "vscode-reh-web-linux-${{ env.VSCODE_ARCH }}" "${name}"
+          tar -czf "${name}.tar.gz" "${name}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tarball=${name}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: scripts/ovs-chat/Dockerfile.ci
+          platforms: linux/arm64
+          push: true
+          build-args: |
+            TARBALL=${{ steps.bundle.outputs.tarball }}
+          tags: |
+            ghcr.io/passionke/openvscode-server:${{ steps.bundle.outputs.version }}-ovs-chat-arm64
+            ghcr.io/passionke/openvscode-server:ovs-chat-arm64
+
+  release:
+    needs: darwin-arm64
+    if: inputs.upload_release == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: darwin-arm64
+          path: artifacts/
+
+      - name: Resolve version
+        id: meta
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: openvscode-server-v${{ steps.meta.outputs.version }}
+          name: openvscode-server v${{ steps.meta.outputs.version }} (ovs-chat darwin-arm64)
+          files: artifacts/openvscode-server-v*-darwin-arm64.tar.gz
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
