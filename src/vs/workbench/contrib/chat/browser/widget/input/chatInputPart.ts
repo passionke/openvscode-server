@@ -874,10 +874,9 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 			this.experimentService.getTreatment('chat.defaultMode')
 				.then((defaultModeTreatment => {
 					if (isAnonymous) {
-						// be deterministic for anonymous users
-						// to support agentic flows with default
-						// model.
-						defaultModeTreatment = ChatModeKind.Agent;
+						// kejiqing: respect chat.agent.enabled when picking default mode for anonymous users
+						const agentEnabled = this.configurationService.getValue<boolean>(ChatConfiguration.AgentEnabled);
+						defaultModeTreatment = agentEnabled ? ChatModeKind.Agent : ChatModeKind.Ask;
 					}
 
 					if (typeof defaultModeTreatment === 'string') {

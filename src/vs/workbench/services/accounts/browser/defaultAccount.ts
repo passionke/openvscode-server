@@ -82,6 +82,20 @@ interface IMcpRegistryResponse {
 	readonly mcp_registries: ReadonlyArray<IMcpRegistryProvider>;
 }
 
+const EMPTY_DEFAULT_ACCOUNT_CONFIG: IDefaultAccountConfig = {
+	preferredExtensions: [],
+	authenticationProvider: {
+		default: { id: '', name: '' },
+		enterprise: { id: '', name: '' },
+		enterpriseProviderConfig: '',
+		enterpriseProviderUriSetting: '',
+		scopes: [],
+	},
+	tokenEntitlementUrl: '',
+	entitlementUrl: '',
+	mcpRegistryDataUrl: '',
+};
+
 function toDefaultAccountConfig(defaultChatAgent: IDefaultChatAgent): IDefaultAccountConfig {
 	return {
 		preferredExtensions: [
@@ -128,7 +142,9 @@ export class DefaultAccountService extends Disposable implements IDefaultAccount
 		@IProductService productService: IProductService,
 	) {
 		super();
-		this.defaultAccountConfig = toDefaultAccountConfig(productService.defaultChatAgent);
+		this.defaultAccountConfig = productService.defaultChatAgent
+			? toDefaultAccountConfig(productService.defaultChatAgent)
+			: EMPTY_DEFAULT_ACCOUNT_CONFIG;
 	}
 
 	async getDefaultAccount(): Promise<IDefaultAccount | null> {
@@ -835,6 +851,9 @@ class DefaultAccountProviderContribution extends Disposable implements IWorkbenc
 		@IDefaultAccountService defaultAccountService: IDefaultAccountService,
 	) {
 		super();
+		if (!productService.defaultChatAgent) {
+			return;
+		}
 		const defaultAccountProvider = this._register(instantiationService.createInstance(DefaultAccountProvider, toDefaultAccountConfig(productService.defaultChatAgent)));
 		defaultAccountService.setDefaultAccountProvider(defaultAccountProvider);
 	}

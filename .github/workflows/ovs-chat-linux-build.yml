@@ -1,0 +1,118 @@
+# Build openvscode-server reh-web (linux) + ovs-chat-demo VSIX for container deploy.
+# Local Mac dev uses scripts/ovs-chat/build-ovs.sh → darwin-arm64 (not built here).
+# Author: kejiqing
+name: OVS Chat Linux Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_release:
+        description: 'Upload tarballs to GitHub Release (needs tag openvscode-server-v*)'
+        type: boolean
+        default: false
+
+env:
+  NPM_REGISTRY: https://registry.npmmirror.com
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - vscode_arch: arm64
+            npm_arch: arm64
+          - vscode_arch: x64
+            npm_arch: x64
+
+    name: linux-${{ matrix.vscode_arch }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Setup system (xvfb)
+        run: |
+          set -e
+          ./build/azure-pipelines/linux/apt-retry.sh sudo apt-get update
+          ./build/azure-pipelines/linux/apt-retry.sh sudo apt-get install -y pkg-config dbus xvfb libgtk-3-0 libxkbfile-dev libkrb5-dev libgbm1
+          sudo cp build/azure-pipelines/linux/xvfb.init /etc/init.d/xvfb
+          sudo chmod +x /etc/init.d/xvfb
+          sudo update-rc.d xvfb defaults
+          sudo service xvfb start
+
+      - name: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+          npm_config_arch: ${{ matrix.npm_arch }}
+        run: |
+          set -e
+          npm config set registry "$NPM_REGISTRY"
+          cd build && npm ci && cd ..
+          source ./build/azure-pipelines/linux/setup-env.sh
+          node build/npm/preinstall.ts
+          npm ci
+
+      - name: Compile reh-web
+        env:
+          DISABLE_V8_COMPILE_CACHE: 1
+        run: |
+          set -e
+          npm run gulp core-ci
+          npm run gulp extensions-ci
+          npm run gulp minify-vscode-reh-web
+          npm run gulp vscode-reh-web-linux-${{ matrix.vscode_arch }}-min-ci
+
+      - name: Package ovs-chat-demo VSIX
+        run: |
+          chmod +x scripts/ovs-chat/package-ovs-extension-vsix.sh
+          bash scripts/ovs-chat/package-ovs-extension-vsix.sh
+
+      - name: Bundle tarball
+        id: bundle
+        run: |
+          set -e
+          version=$(node -p "require('./package.json').version")
+          name="openvscode-server-v${version}-linux-${{ matrix.vscode_arch }}"
+          mv "vscode-reh-web-linux-${{ matrix.vscode_arch }}" "${name}"
+          tar -czf "${name}.tar.gz" "${name}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.vscode_arch }}
+          path: |
+            openvscode-server-v*-linux-*.tar.gz
+            .build/ovs-chat-demo.vsix
+
+  release:
+    needs: build
+    if: inputs.upload_release == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          merge-multiple: true
+
+      - name: Resolve version
+        id: meta
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: openvscode-server-v${{ steps.meta.outputs.version }}
+          name: openvscode-server v${{ steps.meta.outputs.version }} (ovs-chat)
+          files: artifacts/**/*.tar.gz
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

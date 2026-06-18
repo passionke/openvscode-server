@@ -1,0 +1,13 @@
+{
+  "files.watcherUsePolling": true,
+  "chat.disableAIFeatures": true,
+  "chat.agent.enabled": false,
+  "chat.experimental.serverlessWebEnabled": false,
+  "extensions.autoUpdate": false,
+  "extensions.autoCheckUpdates": false,
+  "update.mode": "none",
+  "security.workspace.trust.enabled": false,
+  "security.workspace.trust.startupPrompt": "never",
+  "security.workspace.trust.banner": "never",
+  "security.workspace.trust.emptyWindow": true
+}

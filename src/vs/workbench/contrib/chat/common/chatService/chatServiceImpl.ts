@@ -1080,6 +1080,7 @@ export class ChatService extends Disposable implements IChatService {
 						}
 					}
 
+					this.logService.info(`[OVS-CHAT] chatServiceImpl invokeAgent agentId=${agent.id} requestId=${requestProps.requestId} mode=${options?.modeInfo?.kind ?? 'unknown'}`);
 					const agentResult = await this.chatAgentService.invokeAgent(agent.id, requestProps, progressCallback, history, token);
 					rawResult = agentResult;
 					agentOrCommandFollowups = this.chatAgentService.getFollowups(agent.id, requestProps, agentResult, history, followupsCancelToken);

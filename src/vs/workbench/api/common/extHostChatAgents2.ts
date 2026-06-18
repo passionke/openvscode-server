@@ -693,6 +693,7 @@ export class ExtHostChatAgents2 extends Disposable implements ExtHostChatAgentsS
 		if (!agent) {
 			throw new Error(`[CHAT](${handle}) CANNOT invoke agent because the agent is not registered`);
 		}
+		this._logService.info(`[OVS-CHAT] extHost $invokeAgent agentId=${agent.id} handle=${handle} requestId=${requestDto.requestId}`);
 
 		let stream: ChatAgentResponseStream | undefined;
 		let inFlightRequest: InFlightChatRequest | undefined;

@@ -288,6 +288,7 @@ export class ChatAgentService extends Disposable implements IChatAgentService {
 	constructor(
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@ILogService private readonly logService: ILogService,
 	) {
 		super();
 		this._hasDefaultAgent = ChatContextKeys.enabled.bindTo(this.contextKeyService);
@@ -518,9 +519,11 @@ export class ChatAgentService extends Disposable implements IChatAgentService {
 	async invokeAgent(id: string, request: IChatAgentRequest, progress: (parts: IChatProgress[]) => void, history: IChatAgentHistoryEntry[], token: CancellationToken): Promise<IChatAgentResult> {
 		const data = this._agents.get(id);
 		if (!data?.impl) {
+			this.logService.warn(`[OVS-CHAT] chatAgents invokeAgent no impl agentId=${id} requestId=${request.requestId}`);
 			throw new Error(`No activated agent with id "${id}"`);
 		}
 
+		this.logService.info(`[OVS-CHAT] chatAgents invokeAgent agentId=${id} requestId=${request.requestId} hasImpl=true`);
 		return await data.impl.invoke(request, progress, history, token);
 	}
 

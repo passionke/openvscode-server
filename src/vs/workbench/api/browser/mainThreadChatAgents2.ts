@@ -178,13 +178,19 @@ export class MainThreadChatAgents2 extends Disposable implements MainThreadChatA
 
 		const impl: IChatAgentImplementation = {
 			invoke: async (request, progress, history, token) => {
+				this._logService.info(`[OVS-CHAT] mainThread invoke agentId=${id} handle=${handle} requestId=${request.requestId}`);
 				const chatSession = this._chatService.getSession(request.sessionResource);
 				this._pendingProgress.set(request.requestId, { progress, chatSession });
 				try {
-					return await this._proxy.$invokeAgent(handle, request, {
+					const result = await this._proxy.$invokeAgent(handle, request, {
 						history,
 						chatSessionContext: chatSession?.contributedChatSession
 					}, token) ?? {};
+					this._logService.info(`[OVS-CHAT] mainThread invoke done agentId=${id} requestId=${request.requestId}`);
+					return result;
+				} catch (err) {
+					this._logService.error(`[OVS-CHAT] mainThread invoke failed agentId=${id} requestId=${request.requestId}`, err);
+					throw err;
 				} finally {
 					this._pendingProgress.delete(request.requestId);
 				}
@@ -246,6 +252,7 @@ export class MainThreadChatAgents2 extends Disposable implements MainThreadChatA
 			dispose: () => disposable.dispose(),
 			hasFollowups: metadata.hasFollowups
 		});
+		this._logService.info(`[OVS-CHAT] mainThread $registerAgent agentId=${id} handle=${handle} ext=${extension.value}`);
 	}
 
 	async $updateAgent(handle: number, metadataUpdate: IExtensionChatAgentMetadata): Promise<void> {

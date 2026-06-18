@@ -66,6 +66,7 @@ export const unicodeFilter = Object.freeze<string[]>([
 	'!src/vs/base/browser/dompurify/**',
 	'!src/vs/workbench/services/keybinding/browser/keyboardLayouts/**',
 	'!src/vs/workbench/contrib/terminal/common/scripts/psreadline/**',
+	'!scripts/ovs-chat/**',
 ]);
 
 export const indentationFilter = Object.freeze<string[]>([
@@ -91,6 +92,7 @@ export const indentationFilter = Object.freeze<string[]>([
 	'!build/darwin/patch-dmg.py',
 	'!build/npm/gyp/patches/gyp_spectre_mitigation_support.patch',
 	'!product.overrides.json',
+	'!scripts/ovs-chat/**',
 
 	// except specific folders
 	'!test/automation/out/**',

@@ -1,0 +1,20 @@
+# OVS + ovs-chat-demo 本地验证（podman compose）。Author: kejiqing
+services:
+  openvscode-server:
+    build:
+      context: ../..
+      dockerfile: scripts/ovs-chat/Dockerfile.openvscode
+      args:
+        RELEASE_ORG: gitpod-io
+        RELEASE_TAG: openvscode-server-v1.109.5
+    image: passionke/openvscode-server:ovs-chat-dev
+    container_name: ovs-chat-demo
+    ports:
+      - "13001:3000"
+    volumes:
+      - ovs-workspace:/home/workspace
+    environment:
+      HOME: /opt/claw-ovs/home
+
+volumes:
+  ovs-workspace:
