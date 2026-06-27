@@ -1,5 +1,6 @@
-# Build linux/arm64 OVS + push image to Aliyun ACR (single job, arm64 only).
-# Secrets: ACR_USERNAME, ACR_PASSWORD
+# Build linux/amd64 OVS natively on self-hosted runner + push to ACR via docker.
+# Native build => native .node addons are real x86-64 ELF (not Mach-O).
+# Repo var: ACR_REGISTRY (includes namespace). Secrets: ACR_USERNAME, ACR_PASSWORD.
 # Author: kejiqing
 name: OVS Chat ACR Push
 
@@ -11,26 +12,21 @@ on:
         type: string
         default: ovs-chat-v1.109.5
       tag:
-        description: Image tag suffix
+        description: Image tag
         type: string
-        default: 1.109.5-ovs-chat
+        default: 1.109.5-ovs-chat-amd64
 
 env:
   NPM_REGISTRY: https://registry.npmmirror.com
-  ACR_REGISTRY: crpi-cf9vxpq3n8or17mw.cn-hangzhou.personal.cr.aliyuncs.com
-  ACR_NAMESPACE: passionke
   IMAGE_NAME: openvscode-server
+  VSCODE_ARCH: x64
+  NPM_ARCH: x64
 
 jobs:
   build-push:
-    name: linux-arm64 → ACR
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    permissions:
-      contents: read
-    env:
-      NPM_ARCH: arm64
-      VSCODE_ARCH: arm64
+    name: linux-amd64 -> ACR
+    runs-on: self-hosted
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,21 +36,23 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      - name: Setup system (xvfb)
+      - name: Setup system deps
         run: |
           set -e
-          ./build/azure-pipelines/linux/apt-retry.sh sudo apt-get update
-          ./build/azure-pipelines/linux/apt-retry.sh sudo apt-get install -y pkg-config dbus xvfb libgtk-3-0 libxkbfile-dev libkrb5-dev libgbm1
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config dbus xvfb libgtk-3-0 libxkbfile-dev libkrb5-dev libgbm1 \
+            python3 make g++ jq patch ca-certificates
           sudo cp build/azure-pipelines/linux/xvfb.init /etc/init.d/xvfb
           sudo chmod +x /etc/init.d/xvfb
-          sudo update-rc.d xvfb defaults
-          sudo service xvfb start
+          sudo update-rc.d xvfb defaults || true
+          sudo service xvfb start || true
 
       - name: npm ci
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
-          npm_config_arch: ${{ env.NPM_ARCH }}
+          npm_config_arch: x64
         run: |
           set -e
           npm config set registry "$NPM_REGISTRY"
@@ -63,7 +61,7 @@ jobs:
           node build/npm/preinstall.ts
           npm ci
 
-      - name: Compile reh-web (linux-arm64)
+      - name: Compile reh-web (linux-x64)
         env:
           DISABLE_V8_COMPILE_CACHE: 1
         run: |
@@ -71,7 +69,7 @@ jobs:
           npm run gulp core-ci
           npm run gulp extensions-ci
           npm run gulp minify-vscode-reh-web
-          npm run gulp vscode-reh-web-linux-${{ env.VSCODE_ARCH }}-min-ci
+          npm run gulp vscode-reh-web-linux-x64-min-ci
 
       - name: Package ovs-chat-demo VSIX
         run: |
@@ -83,38 +81,38 @@ jobs:
         run: |
           set -e
           version=$(node -p "require('./package.json').version")
-          name="openvscode-server-v${version}-linux-${{ env.VSCODE_ARCH }}"
-          mv "vscode-reh-web-linux-${{ env.VSCODE_ARCH }}" "${name}"
+          name="openvscode-server-v${version}-linux-x64"
+          mv "vscode-reh-web-linux-x64" "${name}"
           tar -czf "${name}.tar.gz" "${name}"
           echo "tarball=${name}.tar.gz" >> "$GITHUB_OUTPUT"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-arm64
-          path: |
-            openvscode-server-v*-linux-arm64.tar.gz
-            .build/ovs-chat-demo.vsix
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Validate native addons are x86-64 ELF
+        run: |
+          set -e
+          tmp="$(mktemp -d)"
+          tar -xzf "${{ steps.bundle.outputs.tarball }}" -C "$tmp"
+          bad=0
+          while IFS= read -r -d '' f; do
+            case "$f" in */windows.node|*win32-*) continue ;; esac
+            if ! file "$f" | grep -Eq 'ELF 64-bit LSB.*x86-64'; then
+              echo "BAD: ${f#$tmp/}"; file "$f"; bad=$((bad+1))
+            fi
+          done < <(find "$tmp" -name '*.node' -print0)
+          [ "$bad" -eq 0 ] || { echo "native addon validation failed"; exit 1; }
+          echo "native addons OK"
 
       - name: Log in to ACR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.ACR_REGISTRY }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+        run: |
+          echo "${{ secrets.ACR_PASSWORD }}" | docker login "${{ vars.ACR_REGISTRY }}" \
+            -u "${{ secrets.ACR_USERNAME }}" --password-stdin
 
-      - name: Build and push to ACR
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: scripts/ovs-chat/Dockerfile.ci
-          platforms: linux/arm64
-          push: true
-          build-args: |
-            TARBALL=${{ steps.bundle.outputs.tarball }}
-          tags: |
-            ${{ env.ACR_REGISTRY }}/${{ env.ACR_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}
-            ${{ env.ACR_REGISTRY }}/${{ env.ACR_NAMESPACE }}/${{ env.IMAGE_NAME }}:ovs-chat-arm64
+      - name: Build and push image
+        run: |
+          set -e
+          IMG="${{ vars.ACR_REGISTRY }}/${IMAGE_NAME}:${{ inputs.tag }}"
+          docker build --platform linux/amd64 \
+            -f scripts/ovs-chat/Dockerfile.ci \
+            --build-arg "TARBALL=${{ steps.bundle.outputs.tarball }}" \
+            -t "$IMG" .
+          docker push "$IMG"
+          echo "PUSHED: $IMG"

@@ -10,6 +10,8 @@ ACR_NAMESPACE="${ACR_NAMESPACE:-passionke}"
 IMAGE_NAME="${IMAGE_NAME:-openvscode-server}"
 VERSION="$(node -p "require('./package.json').version")"
 VSCODE_ARCH="${VSCODE_ARCH:-arm64}"
+die() { echo "ERROR: $*" >&2; exit 1; }
+
 case "${VSCODE_ARCH}" in
   arm64) PLATFORM="${PLATFORM:-linux/arm64}"; DEFAULT_TAG="${VERSION}-ovs-chat" ;;
   x64)   PLATFORM="${PLATFORM:-linux/amd64}"; DEFAULT_TAG="${VERSION}-ovs-chat-amd64" ;;
@@ -18,8 +20,6 @@ esac
 TAG="${TAG:-${DEFAULT_TAG}}"
 TARBALL="${TARBALL:-openvscode-server-v${VERSION}-linux-${VSCODE_ARCH}.tar.gz}"
 FULL_IMAGE="${ACR_REGISTRY}/${ACR_NAMESPACE}/${IMAGE_NAME}:${TAG}"
-
-die() { echo "ERROR: $*" >&2; exit 1; }
 
 command -v podman >/dev/null || die "podman not found"
 
@@ -32,12 +32,41 @@ else
 fi
 [[ -f "${TARBALL}" ]] || die "missing tarball: ${TARBALL}"
 
+validate_native_addons() {
+  local tmp expected bad_count
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "${tmp}"' RETURN
+
+  tar -xzf "${TARBALL}" -C "${tmp}"
+  case "${VSCODE_ARCH}" in
+    arm64) expected='ELF 64-bit LSB.*ARM aarch64' ;;
+    x64) expected='ELF 64-bit LSB.*x86-64' ;;
+  esac
+
+  bad_count=0
+  while IFS= read -r -d '' addon; do
+    case "${addon}" in
+      */windows.node|*win32-*) continue ;;
+    esac
+    if ! file "${addon}" | grep -Eq "${expected}"; then
+      echo "bad native addon: ${addon#${tmp}/}"
+      file "${addon}"
+      bad_count=$((bad_count + 1))
+    fi
+  done < <(find "${tmp}" -name '*.node' -print0)
+
+  [[ "${bad_count}" -eq 0 ]] || die "native addon validation failed for ${VSCODE_ARCH}"
+}
+
+echo ">>> validate native addons (${VSCODE_ARCH})"
+validate_native_addons
+
 if [[ ! -f .build/ovs-chat-demo.vsix ]]; then
   bash scripts/ovs-chat/package-ovs-extension-vsix.sh
 fi
 
-echo ">>> podman build ${PLATFORM} ${FULL_IMAGE}"
-podman build --platform "${PLATFORM}" \
+echo ">>> podman build ${PLATFORM} ${FULL_IMAGE} (no cache)"
+podman build --no-cache --platform "${PLATFORM}" \
   -f scripts/ovs-chat/Dockerfile.ci \
   --build-arg "TARBALL=${TARBALL}" \
   -t "${FULL_IMAGE}" \
